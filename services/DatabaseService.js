@@ -146,3 +146,27 @@ export class DatabaseService {
     const { data, error } = await supabase
       .from('step_attempts')
       .select(`
+        *,
+        instructions (
+          step_number,
+          instruction_text
+        )
+      `)
+      .eq('session_id', sessionId)
+      .order('timestamp', { ascending: true });
+
+    if (error) throw error;
+    return data;
+  }
+
+  // Utility functions
+  static async deleteInstructionSet(id) {
+    const { error } = await supabase
+      .from('instruction_sets')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  }
+}
