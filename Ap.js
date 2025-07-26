@@ -464,4 +464,746 @@ export default function App() {
         'manual'
       );
 
-      await DatabaseService
+      await DatabaseService.addInstruction(
+        instructionSet.id,
+        1,
+        'Touch something red with your finger',
+        { type: 'touch', target: 'red', details: 'any red object' },
+        { lookFor: ['red object', 'hand touching'], successCondition: 'finger touches red object' }
+      );
+
+      await DatabaseService.addInstruction(
+        instructionSet.id,
+        2,
+        'Point to something blue with your finger',
+        { type: 'point', target: 'blue', details: 'blue colored object' },
+        { lookFor: ['pointing gesture', 'blue object'], successCondition: 'finger points at blue' }
+      );
+
+      await DatabaseService.addInstruction(
+        instructionSet.id,
+        3,
+        'Hold up something yellow and show it to the camera',
+        { type: 'hold', target: 'yellow', details: 'yellow object held up' },
+        { lookFor: ['yellow object', 'holding gesture'], successCondition: 'yellow object held in view' }
+      );
+
+      setFeedback('✅ Real AI demo lesson created!');
+      Speech.speak('Demo lesson created successfully!');
+      await loadInstructionSets();
+
+    } catch (error) {
+      console.error('❌ Error creating demo:', error);
+      Alert.alert('Error', 'Failed to create demo lesson');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Permission check
+  if (cameraPermission === null) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Requesting camera permission...</Text>
+      </View>
+    );
+  }
+
+  if (!cameraPermission) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>Camera access is required for AI vision</Text>
+        <TouchableOpacity style={styles.button} onPress={requestPermissions}>
+          <Text style={styles.buttonText}>Grant Camera Permission</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+      
+      <ScrollView style={styles.scrollView}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>AI Learning Assistant</Text>
+          <Text style={styles.subtitle}>
+            {userMode === 'teacher' ? '🎬 Teacher Mode' : '📱 Student Mode'}
+          </Text>
+          
+          {/* Mode Switch */}
+          <TouchableOpacity style={styles.modeButton} onPress={switchMode}>
+            <Text style={styles.modeButtonText}>
+              Switch to {userMode === 'teacher' ? 'Student' : 'Teacher'} Mode
+            </Text>
+          </TouchableOpacity>
+          
+          {/* Stats for current session */}
+          {(score > 0 || attempts > 0) && (
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{score}</Text>
+                <Text style={styles.statLabel}>Correct</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{attempts}</Text>
+                <Text style={styles.statLabel}>Attempts</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>
+                  {attempts > 0 ? Math.round((score / attempts) * 100) : 0}%
+                </Text>
+                <Text style={styles.statLabel}>Success</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Camera */}
+        <View style={styles.cameraContainer}>
+          <Camera
+            ref={cameraRef}
+            style={styles.camera}
+            type={Camera.Constants.Type.back}
+            ratio="16:9"
+          />
+        </View>
+
+        {/* Mode-specific content */}
+        {userMode === 'teacher' ? (
+          /* ========== TEACHER MODE ========== */
+          <View style={styles.teacherSection}>
+            <Text style={styles.sectionTitle}>🎬 Teacher Tools</Text>
+            
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => setShowRecordingModal(true)}
+            >
+              <Text style={styles.buttonText}>📹 Record New Lesson</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={createDemoLesson}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>
+                {loading ? 'Creating...' : '🎯 Create AI Vision Demo'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Recorded Lessons */}
+            {lessonRecordings.length > 0 && (
+              <View style={styles.recordingsSection}>
+                <Text style={styles.subsectionTitle}>📚 Your Recorded Lessons:</Text>
+                {lessonRecordings.slice(0, 3).map(recording => (
+                  <View key={recording.id} style={styles.recordingCard}>
+                    <Text style={styles.recordingTitle}>{recording.title}</Text>
+                    <Text style={styles.recordingDescription}>{recording.description}</Text>
+                    <Text style={styles.recordingDuration}>
+                      Duration: {Math.round(recording.duration_ms / 1000)}s
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+          /* ========== STUDENT MODE ========== */
+          <View style={styles.studentSection}>
+            <Text style={styles.sectionTitle}>📱 Student Learning</Text>
+            
+            {/* AI Vision Lessons */}
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={createDemoLesson}
+              disabled={loading}
+            >
+              <Text style={styles.buttonText}>
+                {loading ? 'Creating...' : '🤖 Try AI Vision Demo'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Recorded Lessons */}
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => setShowPlaybackModal(true)}
+            >
+              <Text style={styles.buttonText}>📺 Watch Recorded Lessons</Text>
+            </TouchableOpacity>
+
+            {/* Available AI Vision Lessons */}
+            {instructionSets.map(set => (
+              <TouchableOpacity
+                key={set.id}
+                style={styles.lessonButton}
+                onPress={() => startLearningSession(set.id)}
+                disabled={loading}
+              >
+                <Text style={styles.lessonButtonText}>{set.title}</Text>
+                <Text style={styles.lessonDescription}>{set.description}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {/* AI Analysis Button */}
+            {currentInstruction && (
+              <TouchableOpacity
+                style={[styles.analyzeButton, isAnalyzing && styles.analyzing]}
+                onPress={analyzeCurrentAction}
+                disabled={isAnalyzing}
+              >
+                <Text style={styles.buttonText}>
+                  {isAnalyzing ? '🤖 AI Analyzing...' : '📸 Let AI Check My Action'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Feedback */}
+        <View style={styles.feedbackCard}>
+          <Text style={styles.feedbackTitle}>💬 Feedback:</Text>
+          <Text style={styles.feedbackText}>{feedback}</Text>
+        </View>
+      </ScrollView>
+
+      {/* ========== RECORDING MODAL ========== */}
+      <Modal
+        visible={showRecordingModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>🎬 Record New Lesson</Text>
+            <TouchableOpacity onPress={() => setShowRecordingModal(false)}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Lesson Title"
+              value={lessonTitle}
+              onChangeText={setLessonTitle}
+              editable={!isRecording}
+            />
+            
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              placeholder="Lesson Description"
+              value={lessonDescription}
+              onChangeText={setLessonDescription}
+              multiline
+              numberOfLines={3}
+              editable={!isRecording}
+            />
+
+            <TextInput
+              style={styles.textInput}
+              placeholder="Current Action (describe what you're doing)"
+              value={currentAction}
+              onChangeText={setCurrentAction}
+              editable={isRecording}
+            />
+
+            {isRecording && (
+              <View style={styles.recordingStatus}>
+                <Text style={styles.recordingTime}>
+                  ⏱️ Recording: {Math.floor(recordingData.duration / 1000)}s
+                </Text>
+                <Text style={styles.interactionCount}>
+                  📍 Actions: {interactionLogger.current.length}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.recordButton, isRecording && styles.stopButton]}
+              onPress={isRecording ? stopRecording : startRecording}
+              disabled={!isRecording && (!lessonTitle || !lessonDescription)}
+            >
+              <Text style={styles.buttonText}>
+                {isRecording ? '⏹️ Stop Recording' : '🎬 Start Recording'}
+              </Text>
+            </TouchableOpacity>
+
+            {isRecording && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => logInteraction('input', { value: currentAction })}
+                >
+                  <Text style={styles.actionButtonText}>⌨️ Log Input</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => logInteraction('tap', { instruction: currentAction })}
+                >
+                  <Text style={styles.actionButtonText}>👆 Log Tap</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => logInteraction('instruction', { value: currentAction })}
+                >
+                  <Text style={styles.actionButtonText}>💬 Log Instruction</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ========== PLAYBACK MODAL ========== */}
+      <Modal
+        visible={showPlaybackModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>📺 Recorded Lessons</Text>
+            <TouchableOpacity onPress={() => setShowPlaybackModal(false)}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {isPlaying && selectedLesson ? (
+              /* Playback Interface */
+              <View style={styles.playbackInterface}>
+                <Text style={styles.playbackTitle}>{selectedLesson.title}</Text>
+                <Text style={styles.playbackProgress}>
+                  Step {currentStep + 1} of {selectedLesson.interactions.length}
+                </Text>
+                <Text style={styles.playbackScore}>
+                  Score: {playbackScore.correct}/{playbackScore.total}
+                </Text>
+
+                {selectedLesson.interactions[currentStep]?.type === 'input' && (
+                  <View style={styles.inputSection}>
+                    <Text style={styles.inputLabel}>Type here:</Text>
+                    <TextInput
+                      style={styles.studentInput}
+                      placeholder={`Type: ${selectedLesson.interactions[currentStep]?.data?.value || 'expected text'}`}
+                      value={studentInput}
+                      onChangeText={setStudentInput}
+                      multiline
+                    />
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={styles.validateButton}
+                  onPress={validateStudentAction}
+                >
+                  <Text style={styles.buttonText}>✓ Check My Work</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.stopButton}
+                  onPress={completePlayback}
+                >
+                  <Text style={styles.buttonText}>⏹️ Stop Lesson</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              /* Lesson Selection */
+              <View>
+                {lessonRecordings.length === 0 ? (
+                  <Text style={styles.noLessonsText}>
+                    No recorded lessons available. Switch to Teacher mode to create some!
+                  </Text>
+                ) : (
+                  lessonRecordings.map(recording => (
+                    <TouchableOpacity
+                      key={recording.id}
+                      style={styles.lessonCard}
+                      onPress={() => startPlayback(recording)}
+                    >
+                      <Text style={styles.lessonCardTitle}>{recording.title}</Text>
+                      <Text style={styles.lessonCardDescription}>{recording.description}</Text>
+                      <Text style={styles.lessonCardDuration}>
+                        Duration: {Math.round(recording.duration_ms / 1000)}s
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+// ========== STYLES ==========
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  header: {
+    backgroundColor: '#667eea',
+    padding: 20,
+    paddingTop: 50,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: 'white',
+    opacity: 0.9,
+    marginBottom: 15,
+  },
+  modeButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginBottom: 15,
+  },
+  modeButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: 'white',
+    opacity: 0.8,
+  },
+  cameraContainer: {
+    margin: 20,
+    borderRadius: 15,
+    overflow: 'hidden',
+    elevation: 5,
+  },
+  camera: {
+    width: '100%',
+    height: 250,
+  },
+  teacherSection: {
+    margin: 20,
+  },
+  studentSection: {
+    margin: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+  },
+  subsectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#555',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  primaryButton: {
+    backgroundColor: '#4ecdc4',
+    padding: 18,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 12,
+    elevation: 3,
+  },
+  secondaryButton: {
+    backgroundColor: '#667eea',
+    padding: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  lessonButton: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 10,
+    elevation: 2,
+  },
+  lessonButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  lessonDescription: {
+    fontSize: 14,
+    color: '#666',
+  },
+  analyzeButton: {
+    backgroundColor: '#f39c12',
+    padding: 18,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginTop: 10,
+    elevation: 3,
+  },
+  analyzing: {
+    backgroundColor: '#e67e22',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  recordingsSection: {
+    marginTop: 20,
+  },
+  recordingCard: {
+    backgroundColor: 'white',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    elevation: 2,
+  },
+  recordingTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  recordingDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  recordingDuration: {
+    fontSize: 12,
+    color: '#999',
+  },
+  feedbackCard: {
+    margin: 20,
+    padding: 20,
+    backgroundColor: 'white',
+    borderRadius: 15,
+    elevation: 3,
+    marginBottom: 40,
+  },
+  feedbackTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  feedbackText: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 24,
+  },
+  
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 50,
+    backgroundColor: '#8e44ad',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  closeButton: {
+    fontSize: 24,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    marginBottom: 15,
+    backgroundColor: '#f9f9f9',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  recordingStatus: {
+    backgroundColor: '#ffe6e6',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  recordingTime: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#c0392b',
+    marginBottom: 5,
+  },
+  interactionCount: {
+    fontSize: 14,
+    color: '#e74c3c',
+  },
+  recordButton: {
+    backgroundColor: '#e74c3c',
+    padding: 18,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  stopButton: {
+    backgroundColor: '#c0392b',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    backgroundColor: '#f39c12',
+    padding: 12,
+    borderRadius: 20,
+    marginBottom: 10,
+    minWidth: '30%',
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  
+  // Playback Styles
+  playbackInterface: {
+    padding: 20,
+  },
+  playbackTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  playbackProgress: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 5,
+  },
+  playbackScore: {
+    fontSize: 16,
+    color: '#27ae60',
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  inputSection: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  studentInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  validateButton: {
+    backgroundColor: '#27ae60',
+    padding: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  lessonCard: {
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  lessonCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  lessonCardDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  lessonCardDuration: {
+    fontSize: 12,
+    color: '#999',
+  },
+  noLessonsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 50,
+    lineHeight: 24,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#e74c3c',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#4ecdc4',
+    padding: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    margin: 20,
+  },
+});
