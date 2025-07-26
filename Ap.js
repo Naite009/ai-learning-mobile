@@ -61,7 +61,7 @@ export default function App() {
   const interactionLogger = useRef([]);
   const validationTimer = useRef(null);
 
-  // ========== EXISTING INITIALIZATION ==========
+  // ========== INITIALIZATION ==========
   useEffect(() => {
     console.log('🚀 AI Learning App initializing...');
     requestPermissions();
@@ -69,7 +69,7 @@ export default function App() {
     loadLessonRecordings();
   }, []);
 
-  // ========== EXISTING METHODS (unchanged) ==========
+  // ========== PERMISSION & LOADING METHODS ==========
   const requestPermissions = async () => {
     try {
       const cameraResult = await Camera.requestCameraPermissionsAsync();
@@ -93,9 +93,6 @@ export default function App() {
     }
   };
 
-  // ========== NEW METHODS FOR RECORDING FEATURE ==========
-  
-  // Load lesson recordings
   const loadLessonRecordings = async () => {
     try {
       console.log('🎬 Loading lesson recordings...');
@@ -107,7 +104,7 @@ export default function App() {
     }
   };
 
-  // Switch between teacher and student modes
+  // ========== MODE SWITCHING ==========
   const switchMode = () => {
     const newMode = userMode === 'teacher' ? 'student' : 'teacher';
     setUserMode(newMode);
@@ -116,8 +113,6 @@ export default function App() {
   };
 
   // ========== RECORDING METHODS ==========
-  
-  // Start recording lesson
   const startRecording = async () => {
     if (!lessonTitle.trim()) {
       Alert.alert('Error', 'Please enter a lesson title');
@@ -126,14 +121,15 @@ export default function App() {
 
     try {
       setIsRecording(true);
-      setRecordingData({ interactions: [], startTime: Date.now(), duration: 0 });
+      const startTime = Date.now();
+      setRecordingData({ interactions: [], startTime, duration: 0 });
       interactionLogger.current = [];
 
       // Start timer
       recordingTimer.current = setInterval(() => {
         setRecordingData(prev => ({
           ...prev,
-          duration: Date.now() - prev.startTime
+          duration: Date.now() - startTime
         }));
       }, 1000);
 
@@ -152,7 +148,6 @@ export default function App() {
     }
   };
 
-  // Log interaction during recording
   const logInteraction = (type, data) => {
     if (!isRecording) return;
     
@@ -171,7 +166,6 @@ export default function App() {
     setFeedback(`Logged ${type} action: ${data.instruction || data.value}`);
   };
 
-  // Stop recording
   const stopRecording = async () => {
     try {
       setIsRecording(false);
@@ -194,7 +188,6 @@ export default function App() {
     }
   };
 
-  // Save recorded lesson
   const saveLessonRecording = async () => {
     try {
       // Create instruction set first
@@ -240,8 +233,6 @@ export default function App() {
   };
 
   // ========== PLAYBACK METHODS ==========
-
-  // Start lesson playback
   const startPlayback = async (lessonRecording) => {
     try {
       setSelectedLesson(lessonRecording);
@@ -268,7 +259,6 @@ export default function App() {
     }
   };
 
-  // Start validation timer for playback
   const startValidationTimer = () => {
     if (validationTimer.current) {
       clearInterval(validationTimer.current);
@@ -281,7 +271,6 @@ export default function App() {
     }, 3000); // Check every 3 seconds
   };
 
-  // Validate student action during playback
   const validateStudentAction = async () => {
     if (!selectedLesson || currentStep >= selectedLesson.interactions.length) return;
 
@@ -341,7 +330,6 @@ export default function App() {
     }
   };
 
-  // Move to next step in playback
   const moveToNextStep = () => {
     if (!selectedLesson || currentStep >= selectedLesson.interactions.length - 1) {
       completePlayback();
@@ -358,7 +346,6 @@ export default function App() {
     setStudentInput(''); // Clear input for next step
   };
 
-  // Complete playback session
   const completePlayback = async () => {
     try {
       setIsPlaying(false);
@@ -391,8 +378,56 @@ export default function App() {
     }
   };
 
-  // ========== EXISTING AI VISION METHODS (unchanged) ==========
-  
+  // ========== AI VISION METHODS ==========
+  const startLearningSession = async (instructionSetId) => {
+    try {
+      setLoading(true);
+      console.log('🎯 Starting learning session for set:', instructionSetId);
+      
+      const session = await DatabaseService.startLearningSession(instructionSetId);
+      setCurrentSession(session);
+      
+      const instructions = await DatabaseService.getInstructions(instructionSetId);
+      if (instructions.length > 0) {
+        setCurrentInstruction(instructions[0]);
+        setFeedback(`📚 ${instructions[0].instruction_text}`);
+        Speech.speak(instructions[0].instruction_text);
+        setScore(0);
+        setAttempts(0);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error starting learning session:', error);
+      Alert.alert('Error', 'Failed to start learning session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const moveToNextInstruction = async () => {
+    if (!currentSession || !currentInstruction) return;
+
+    try {
+      const instructions = await DatabaseService.getInstructions(currentSession.instruction_set_id);
+      const currentIndex = instructions.findIndex(inst => inst.id === currentInstruction.id);
+      
+      if (currentIndex < instructions.length - 1) {
+        const nextInstruction = instructions[currentIndex + 1];
+        setCurrentInstruction(nextInstruction);
+        setFeedback(`📚 ${nextInstruction.instruction_text}`);
+        Speech.speak(nextInstruction.instruction_text);
+      } else {
+        // Session complete
+        setFeedback('🎉 Congratulations! You completed all instructions!');
+        Speech.speak('Excellent work! You have completed the lesson!');
+        setCurrentInstruction(null);
+        setCurrentSession(null);
+      }
+    } catch (error) {
+      console.error('❌ Error moving to next instruction:', error);
+    }
+  };
+
   const analyzeCurrentAction = async () => {
     if (!cameraRef.current || !currentInstruction) return;
 
@@ -500,7 +535,7 @@ export default function App() {
     }
   };
 
-  // Permission check
+  // ========== PERMISSION CHECK ==========
   if (cameraPermission === null) {
     return (
       <View style={styles.centerContainer}>
@@ -520,6 +555,7 @@ export default function App() {
     );
   }
 
+  // ========== MAIN RENDER ==========
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#667eea" />
